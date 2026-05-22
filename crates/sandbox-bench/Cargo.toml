@@ -1,0 +1,10 @@
+[package]
+name = "sandbox-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dev-dependencies]
+sandbox = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }
