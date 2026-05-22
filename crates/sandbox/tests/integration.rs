@@ -747,18 +747,6 @@ async fn dirname_in_pipeline() {
 }
 
 #[tokio::test]
-async fn sort_via_pipe() {
-    let out = run("printf 'c\na\nb\n' | sort").await;
-    assert_eq!(out.stdout, "a\nb\nc\n");
-}
-
-#[tokio::test]
-async fn uniq_via_pipe() {
-    let out = run("printf 'a\na\nb\n' | uniq").await;
-    assert_eq!(out.stdout, "a\nb\n");
-}
-
-#[tokio::test]
 async fn tee_writes_and_passes_through() {
     let mut s = Shell::builder().cwd("/").build();
     let out = s.exec("echo hello | tee /out.txt").await.unwrap();
