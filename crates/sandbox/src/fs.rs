@@ -63,10 +63,7 @@ impl SandboxFs {
 
     pub fn append_file(&self, path: &str, content: &[u8], caps: &CapabilitySet) -> ShellResult<()> {
         caps.check(Cap::WriteFs)?;
-        let existing = match self.read_file(path, caps) {
-            Ok(data) => data,
-            Err(_) => Vec::new(),
-        };
+        let existing = self.read_file(path, caps).unwrap_or_default();
         let mut combined = existing;
         combined.extend_from_slice(content);
         self.write_file(path, &combined, caps)
@@ -128,6 +125,7 @@ impl SandboxFs {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn remove_recursive(&self, path: &VfsPath, caps: &CapabilitySet) -> ShellResult<()> {
         let meta = path.metadata().map_err(|e| ShellError::Io(e.to_string()))?;
         if meta.file_type == vfs::VfsFileType::Directory {

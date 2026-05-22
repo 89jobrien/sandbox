@@ -19,10 +19,8 @@ impl Builtin for Export {
                 let name = &arg[..eq];
                 let value = &arg[eq + 1..];
                 ctx.env.insert(name.to_string(), value.to_string());
-            } else {
-                if let Some(val) = ctx.vars.get(arg.as_str()).cloned() {
-                    ctx.env.insert(arg.clone(), val);
-                }
+            } else if let Some(val) = ctx.vars.get(arg.as_str()).cloned() {
+                ctx.env.insert(arg.clone(), val);
             }
         }
         Ok(ExecResult::code(0))

@@ -335,7 +335,7 @@ impl Builtin for Test_ {
 
     async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
         let args = ctx.args_from(1);
-        let result = evaluate_test(args, ctx.fs, &ctx.cwd);
+        let result = evaluate_test(args, ctx.fs, ctx.cwd);
         Ok(ExecResult::code(if result { 0 } else { 1 }))
     }
 }
@@ -356,7 +356,7 @@ impl Builtin for BracketTest {
         } else {
             args
         };
-        let result = evaluate_test(args, ctx.fs, &ctx.cwd);
+        let result = evaluate_test(args, ctx.fs, ctx.cwd);
         Ok(ExecResult::code(if result { 0 } else { 1 }))
     }
 }

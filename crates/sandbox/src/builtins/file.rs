@@ -73,10 +73,10 @@ impl Builtin for Rm {
             let path = ctx.resolve_path(file);
             if ctx.fs.is_dir(&path)? {
                 if recursive {
-                    if let Err(e) = ctx.fs.remove_dir_all(&path, ctx.capabilities) {
-                        if !force {
-                            return Ok(ExecResult::failure(1, format!("rm: {file}: {e}")));
-                        }
+                    if let Err(e) = ctx.fs.remove_dir_all(&path, ctx.capabilities)
+                        && !force
+                    {
+                        return Ok(ExecResult::failure(1, format!("rm: {file}: {e}")));
                     }
                 } else {
                     return Ok(ExecResult::failure(
@@ -84,10 +84,10 @@ impl Builtin for Rm {
                         format!("rm: {file}: is a directory"),
                     ));
                 }
-            } else if let Err(e) = ctx.fs.remove_file(&path, ctx.capabilities) {
-                if !force {
-                    return Ok(ExecResult::failure(1, format!("rm: {file}: {e}")));
-                }
+            } else if let Err(e) = ctx.fs.remove_file(&path, ctx.capabilities)
+                && !force
+            {
+                return Ok(ExecResult::failure(1, format!("rm: {file}: {e}")));
             }
         }
         Ok(ExecResult::code(0))

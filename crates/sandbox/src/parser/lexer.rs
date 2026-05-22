@@ -419,12 +419,12 @@ impl Lexer {
     fn read_var_name(&mut self) -> String {
         let mut name = String::new();
         // Special variables
-        if let Some(c) = self.peek() {
-            if "?$!#@*-0123456789".contains(c) {
-                name.push(c);
-                self.advance();
-                return name;
-            }
+        if let Some(c) = self.peek()
+            && "?$!#@*-0123456789".contains(c)
+        {
+            name.push(c);
+            self.advance();
+            return name;
         }
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {

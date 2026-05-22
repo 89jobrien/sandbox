@@ -84,30 +84,25 @@ impl Parser {
         let first = self.parse_and_or()?;
         let mut cmds = vec![first];
 
-        loop {
-            match self.peek() {
-                Token::Semi | Token::Newline => {
-                    self.advance();
-                    self.skip_newlines();
-                    if matches!(
-                        self.peek(),
-                        Token::Eof
-                            | Token::Fi
-                            | Token::Done
-                            | Token::Esac
-                            | Token::RBrace
-                            | Token::RParen
-                            | Token::Else
-                            | Token::Elif
-                            | Token::Then
-                            | Token::Do
-                    ) {
-                        break;
-                    }
-                    cmds.push(self.parse_and_or()?);
-                }
-                _ => break,
+        while let Token::Semi | Token::Newline = self.peek() {
+            self.advance();
+            self.skip_newlines();
+            if matches!(
+                self.peek(),
+                Token::Eof
+                    | Token::Fi
+                    | Token::Done
+                    | Token::Esac
+                    | Token::RBrace
+                    | Token::RParen
+                    | Token::Else
+                    | Token::Elif
+                    | Token::Then
+                    | Token::Do
+            ) {
+                break;
             }
+            cmds.push(self.parse_and_or()?);
         }
 
         self.exit_depth();

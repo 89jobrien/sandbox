@@ -271,12 +271,12 @@ impl Interpreter {
 
         for (i, cmd) in cmds.iter().enumerate() {
             // Feed previous stdout as stdin for next command
-            if i > 0 {
-                if let Command::Simple(sc) = cmd {
-                    // Temporarily inject stdin
-                    // Pipeline stdin piping is handled via the builtin context
-                    let _ = sc;
-                }
+            if i > 0
+                && let Command::Simple(sc) = cmd
+            {
+                // Temporarily inject stdin
+                // Pipeline stdin piping is handled via the builtin context
+                let _ = sc;
             }
 
             // For pipeline, we need to capture stdout of each stage
