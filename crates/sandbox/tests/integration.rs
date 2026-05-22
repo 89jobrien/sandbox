@@ -3,6 +3,7 @@ use sandbox::capabilities::{Cap, CapabilitySet};
 use sandbox::error::ShellError;
 use sandbox::interpreter::hooks::{ExecHandler, ExecResult};
 use sandbox::limits::ExecutionLimits;
+use sandbox::snapshot::ShellSnapshot;
 
 use async_trait::async_trait;
 
@@ -646,4 +647,163 @@ async fn builder_capability_grant() {
     // Should work with individually granted caps
     let out = s.exec("echo hello").await.unwrap();
     assert_eq!(out.stdout, "hello\n");
+}
+
+// ── Text builtins ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn wc_lines_via_pipe() {
+    let out = run("printf 'a\nb\nc\n' | wc -l").await;
+    assert_eq!(out.stdout.trim(), "3");
+}
+
+#[tokio::test]
+async fn basename_in_pipeline() {
+    let out = run("basename /usr/local/bin/foo").await;
+    assert_eq!(out.stdout, "foo\n");
+}
+
+#[tokio::test]
+async fn dirname_in_pipeline() {
+    let out = run("dirname /usr/local/bin/foo").await;
+    assert_eq!(out.stdout, "/usr/local/bin\n");
+}
+
+#[tokio::test]
+async fn sort_via_pipe() {
+    let out = run("printf 'c\na\nb\n' | sort").await;
+    assert_eq!(out.stdout, "a\nb\nc\n");
+}
+
+#[tokio::test]
+async fn uniq_via_pipe() {
+    let out = run("printf 'a\na\nb\n' | uniq").await;
+    assert_eq!(out.stdout, "a\nb\n");
+}
+
+#[tokio::test]
+async fn tee_writes_and_passes_through() {
+    let mut s = Shell::builder().cwd("/").build();
+    let out = s.exec("echo hello | tee /out.txt").await.unwrap();
+    assert_eq!(out.stdout, "hello\n");
+    let out = s.exec("cat /out.txt").await.unwrap();
+    assert_eq!(out.stdout, "hello\n");
+}
+
+#[tokio::test]
+async fn grep_filters_lines() {
+    let out = run("printf 'apple\nbanana\ncherry\n' | grep an").await;
+    assert_eq!(out.stdout, "banana\n");
+}
+
+#[tokio::test]
+async fn grep_exit_code_no_match() {
+    let out = run("printf 'hello\n' | grep xyz").await;
+    assert_eq!(out.exit_code, 1);
+}
+
+#[tokio::test]
+async fn sort_uniq_pipeline() {
+    let out = run("printf 'b\na\nb\na\n' | sort | uniq").await;
+    assert_eq!(out.stdout, "a\nb\n");
+}
+
+#[tokio::test]
+async fn grep_from_file() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("printf 'foo\nbar\nbaz\n' > /data.txt")
+        .await
+        .unwrap();
+    let out = s.exec("grep bar /data.txt").await.unwrap();
+    assert_eq!(out.stdout, "bar\n");
+}
+
+#[tokio::test]
+async fn wc_from_file() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("printf 'one two\nthree\n' > /data.txt")
+        .await
+        .unwrap();
+    let out = s.exec("wc -w /data.txt").await.unwrap();
+    assert_eq!(out.stdout.trim(), "3");
+}
+
+// ── Snapshot / Restore ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn snapshot_capture_restore_roundtrip() {
+    let mut shell = Shell::builder()
+        .env("HOME", "/home/user")
+        .cwd("/home/user")
+        .build();
+
+    shell.exec("FOO=bar").await.unwrap();
+    shell.exec("export MY_VAR=hello").await.unwrap();
+    shell.exec("mkdir -p /data").await.unwrap();
+    shell.exec("echo content > /data/file.txt").await.unwrap();
+
+    let snap = shell.snapshot();
+    let mut restored = Shell::from_snapshot(&snap);
+
+    assert_eq!(restored.env().get("MY_VAR").unwrap(), "hello");
+    assert_eq!(restored.vars().get("FOO").unwrap(), "bar");
+    assert_eq!(restored.cwd(), "/home/user");
+
+    let caps = CapabilitySet::default_set();
+    let content = restored
+        .fs()
+        .read_to_string("/data/file.txt", &caps)
+        .unwrap();
+    assert_eq!(content, "content\n");
+
+    // Restored shell can execute commands
+    let out = restored.exec("echo works").await.unwrap();
+    assert_eq!(out.stdout, "works\n");
+}
+
+#[tokio::test]
+async fn snapshot_json_roundtrip() {
+    let mut shell = Shell::builder().env("K", "V").cwd("/tmp").build();
+    shell.exec("echo json > /tmp/data.txt").await.unwrap();
+
+    let snap = shell.snapshot();
+    let json = snap.to_json().unwrap();
+    let snap2 = ShellSnapshot::from_json(&json).unwrap();
+    let mut restored = snap2.restore();
+
+    assert_eq!(restored.env().get("K").unwrap(), "V");
+    let out = restored.exec("cat /tmp/data.txt").await.unwrap();
+    assert_eq!(out.stdout, "json\n");
+}
+
+#[tokio::test]
+async fn snapshot_bincode_roundtrip() {
+    let mut shell = Shell::builder().env("A", "1").cwd("/").build();
+    shell.exec("echo binary > /file.bin").await.unwrap();
+
+    let snap = shell.snapshot();
+    let bytes = snap.to_bincode().unwrap();
+    let snap2 = ShellSnapshot::from_bincode(&bytes).unwrap();
+    let restored = snap2.restore();
+
+    let caps = CapabilitySet::default_set();
+    let content = restored.fs().read_to_string("/file.bin", &caps).unwrap();
+    assert_eq!(content, "binary\n");
+    assert_eq!(restored.env().get("A").unwrap(), "1");
+}
+
+#[tokio::test]
+async fn snapshot_restored_shell_executes() {
+    let mut shell = Shell::builder().cwd("/").build();
+    shell.exec("function greet { echo hi; }").await.unwrap();
+    shell.exec("X=42").await.unwrap();
+
+    let snap = shell.snapshot();
+    let mut restored = Shell::from_snapshot(&snap);
+
+    let out = restored.exec("greet").await.unwrap();
+    assert_eq!(out.stdout, "hi\n");
+
+    let out = restored.exec("echo $X").await.unwrap();
+    assert_eq!(out.stdout, "42\n");
 }

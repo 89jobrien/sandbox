@@ -90,12 +90,26 @@ impl Shell {
         &self.interpreter.fs
     }
 
+    pub fn functions(&self) -> &HashMap<String, parser::ast::Command> {
+        &self.interpreter.functions
+    }
+
     pub fn last_exit_code(&self) -> i32 {
         self.interpreter.last_exit_code
     }
 
     pub fn register_builtin(&mut self, builtin: impl builtins::Builtin + 'static) {
         self.interpreter.builtins.register(builtin);
+    }
+
+    /// Capture a snapshot of this shell's state.
+    pub fn snapshot(&self) -> snapshot::ShellSnapshot {
+        snapshot::ShellSnapshot::capture(self)
+    }
+
+    /// Create a new shell from a snapshot.
+    pub fn from_snapshot(snap: &snapshot::ShellSnapshot) -> Shell {
+        snap.restore()
     }
 }
 
@@ -169,6 +183,41 @@ impl ShellBuilder {
     pub fn builtins(mut self, registry: BuiltinRegistry) -> Self {
         self.builtins = Some(registry);
         self
+    }
+
+    pub fn build_with_state(
+        self,
+        vars: HashMap<String, String>,
+        functions: HashMap<String, parser::ast::Command>,
+    ) -> Shell {
+        let fs = self.fs.unwrap_or_default();
+        let capabilities = self.capabilities.unwrap_or_else(CapabilitySet::default_set);
+        let builtins = self.builtins.unwrap_or_default();
+
+        let _ = fs.mkdir(&self.cwd, &capabilities);
+
+        Shell {
+            interpreter: Interpreter {
+                env: self.env,
+                vars,
+                cwd: self.cwd,
+                fs,
+                capabilities,
+                limits: self.limits.clamped(),
+                counters: ExecutionCounters::default(),
+                functions,
+                last_exit_code: 0,
+                positional_params: Vec::new(),
+                builtins,
+                exec_handler: self
+                    .exec_handler
+                    .unwrap_or_else(|| Box::new(DefaultExecHandler)),
+                stdout_buf: String::new(),
+                stderr_buf: String::new(),
+                pipeline_stdin: None,
+                shell_opts: ShellOpts::default(),
+            },
+        }
     }
 
     pub fn build(self) -> Shell {

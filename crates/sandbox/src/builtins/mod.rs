@@ -2,6 +2,7 @@ pub mod core;
 pub mod file;
 pub mod flow;
 pub mod nav;
+pub mod text;
 pub mod vars;
 
 use std::collections::HashMap;
@@ -122,6 +123,14 @@ impl BuiltinRegistry {
         reg.register(vars::Export);
         reg.register(vars::Set_);
         reg.register(vars::Unset);
+        // Text
+        reg.register(text::Wc);
+        reg.register(text::Basename);
+        reg.register(text::Dirname);
+        reg.register(text::Sort);
+        reg.register(text::Uniq);
+        reg.register(text::Tee);
+        reg.register(text::GrepBuiltin);
         reg
     }
 }

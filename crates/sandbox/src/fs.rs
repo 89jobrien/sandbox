@@ -185,6 +185,78 @@ impl SandboxFs {
     }
 }
 
+impl SandboxFs {
+    /// Walk the entire VFS, returning `(path, content, is_dir)` for every entry.
+    pub fn walk_all(&self) -> ShellResult<Vec<(String, Vec<u8>, bool)>> {
+        let mut result = Vec::new();
+        Self::walk_all_recursive(&self.root, &mut result);
+        Ok(result)
+    }
+
+    fn walk_all_recursive(path: &VfsPath, result: &mut Vec<(String, Vec<u8>, bool)>) {
+        let Ok(meta) = path.metadata() else { return };
+        let vfs_path = path.as_str().to_string();
+        let file_path = if vfs_path.is_empty() {
+            "/".to_string()
+        } else {
+            format!("/{vfs_path}")
+        };
+
+        if meta.file_type == vfs::VfsFileType::Directory {
+            // Skip root "/" to avoid duplication — it's implicit
+            if file_path != "/" {
+                result.push((file_path, Vec::new(), true));
+            }
+            let Ok(children) = path.read_dir() else {
+                return;
+            };
+            for child in children {
+                Self::walk_all_recursive(&child, result);
+            }
+        } else {
+            let mut content = Vec::new();
+            if let Ok(mut f) = path.open_file() {
+                use std::io::Read;
+                let _ = f.read_to_end(&mut content);
+            }
+            result.push((file_path, content, false));
+        }
+    }
+
+    /// Recursively walk the VFS and return all file paths with their contents.
+    pub fn walk_files(&self) -> Vec<(String, Vec<u8>)> {
+        let mut result = Vec::new();
+        Self::walk_recursive(&self.root, &mut result);
+        result
+    }
+
+    fn walk_recursive(path: &VfsPath, result: &mut Vec<(String, Vec<u8>)>) {
+        let Ok(meta) = path.metadata() else { return };
+        if meta.file_type == vfs::VfsFileType::Directory {
+            let Ok(children) = path.read_dir() else {
+                return;
+            };
+            for child in children {
+                Self::walk_recursive(&child, result);
+            }
+        } else {
+            let vfs_path = path.as_str().to_string();
+            let file_path = if vfs_path.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{vfs_path}")
+            };
+            if let Ok(mut f) = path.open_file() {
+                let mut buf = Vec::new();
+                use std::io::Read;
+                if f.read_to_end(&mut buf).is_ok() {
+                    result.push((file_path, buf));
+                }
+            }
+        }
+    }
+}
+
 impl Default for SandboxFs {
     fn default() -> Self {
         Self::new()
