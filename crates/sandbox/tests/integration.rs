@@ -538,6 +538,83 @@ async fn rm_and_verify() {
     assert_eq!(out.stdout, "gone\n");
 }
 
+// ── New file builtins ────────────────────────────────────────────────
+
+#[tokio::test]
+async fn wc_via_shell() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("echo 'one two three' > /f.txt").await.unwrap();
+    let out = s.exec("wc -w /f.txt").await.unwrap();
+    assert_eq!(out.stdout, "3\n");
+}
+
+#[tokio::test]
+async fn basename_via_shell() {
+    let out = run("basename /a/b/c.txt .txt").await;
+    assert_eq!(out.stdout, "c\n");
+}
+
+#[tokio::test]
+async fn dirname_via_shell() {
+    let out = run("dirname /a/b/c").await;
+    assert_eq!(out.stdout, "/a/b\n");
+}
+
+#[tokio::test]
+async fn sort_via_pipe() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("printf 'c\\nb\\na\\n' > /f.txt").await.unwrap();
+    let out = s.exec("cat /f.txt | sort").await.unwrap();
+    assert_eq!(out.stdout, "a\nb\nc\n");
+}
+
+#[tokio::test]
+async fn uniq_via_pipe() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("printf 'a\\na\\nb\\n' > /f.txt").await.unwrap();
+    let out = s.exec("cat /f.txt | uniq").await.unwrap();
+    assert_eq!(out.stdout, "a\nb\n");
+}
+
+#[tokio::test]
+async fn tee_via_pipe() {
+    let mut s = Shell::builder().cwd("/").build();
+    let out = s.exec("echo hello | tee /out.txt").await.unwrap();
+    assert_eq!(out.stdout, "hello\n");
+    let out = s.exec("cat /out.txt").await.unwrap();
+    assert_eq!(out.stdout, "hello\n");
+}
+
+#[tokio::test]
+async fn find_files() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("mkdir -p /d").await.unwrap();
+    s.exec("touch /d/a.txt").await.unwrap();
+    s.exec("touch /d/b.rs").await.unwrap();
+    let out = s.exec("find /d -name '*.txt'").await.unwrap();
+    assert_eq!(out.stdout, "/d/a.txt\n");
+}
+
+#[tokio::test]
+async fn grep_in_file() {
+    let mut s = Shell::builder().cwd("/").build();
+    s.exec("printf 'foo\\nbar\\nfoo baz\\n' > /f.txt")
+        .await
+        .unwrap();
+    let out = s.exec("grep foo /f.txt").await.unwrap();
+    assert_eq!(out.stdout, "foo\nfoo baz\n");
+}
+
+#[tokio::test]
+async fn grep_pipe() {
+    let mut s = Shell::builder().cwd("/").build();
+    let out = s
+        .exec("printf 'alpha\\nbeta\\ngamma\\n' | grep eta")
+        .await
+        .unwrap();
+    assert_eq!(out.stdout, "beta\n");
+}
+
 // ── Shell state inspection ──────────────────────────────────────────
 
 #[tokio::test]
