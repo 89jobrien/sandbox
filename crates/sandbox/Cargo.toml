@@ -18,4 +18,5 @@ regex = { workspace = true }
 vfs = { workspace = true }
 
 [dev-dependencies]
+proptest = "1.11.0"
 tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

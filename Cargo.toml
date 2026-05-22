@@ -1,6 +1,7 @@
 [workspace]
 members = ["crates/sandbox", "crates/sandbox-cli", "crates/sandbox-bench"]
 resolver = "2"
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"
