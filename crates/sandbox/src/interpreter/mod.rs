@@ -27,6 +27,7 @@ pub struct Interpreter {
     pub exec_handler: Box<dyn ExecHandler>,
     pub stdout_buf: String,
     pub stderr_buf: String,
+    pub pipeline_stdin: Option<Vec<u8>>,
     pub shell_opts: ShellOpts,
 }
 
@@ -201,8 +202,10 @@ impl Interpreter {
         let cmd_name = &expanded_words[0];
         let args: Vec<String> = expanded_words[1..].to_vec();
 
-        // Handle stdin from redirections
-        let stdin_data = self.collect_stdin_redirect(&sc.redirections)?;
+        // Handle stdin from redirections, falling back to pipeline stdin
+        let stdin_data = self
+            .collect_stdin_redirect(&sc.redirections)?
+            .or_else(|| self.pipeline_stdin.take());
 
         // Check exec handler first
         if let Some(result) = self.exec_handler.handle(cmd_name, &args).await {
@@ -271,12 +274,8 @@ impl Interpreter {
 
         for (i, cmd) in cmds.iter().enumerate() {
             // Feed previous stdout as stdin for next command
-            if i > 0
-                && let Command::Simple(sc) = cmd
-            {
-                // Temporarily inject stdin
-                // Pipeline stdin piping is handled via the builtin context
-                let _ = sc;
+            if i > 0 && !last_stdout.is_empty() {
+                self.pipeline_stdin = Some(last_stdout.clone().into_bytes());
             }
 
             // For pipeline, we need to capture stdout of each stage

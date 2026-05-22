@@ -197,6 +197,7 @@ impl ShellBuilder {
                     .unwrap_or_else(|| Box::new(DefaultExecHandler)),
                 stdout_buf: String::new(),
                 stderr_buf: String::new(),
+                pipeline_stdin: None,
                 shell_opts: ShellOpts::default(),
             },
         }

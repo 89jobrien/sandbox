@@ -599,6 +599,26 @@ async fn exit_code_from_or_chain() {
     assert_eq!(out.exit_code, 0);
 }
 
+// ── Pipeline stdin piping ───────────────────────────────────────────
+
+#[tokio::test]
+async fn pipe_echo_to_cat() {
+    let out = run("echo hello | cat").await;
+    assert_eq!(out.stdout, "hello\n");
+}
+
+#[tokio::test]
+async fn pipe_three_stages() {
+    let out = run("echo hello | cat | cat").await;
+    assert_eq!(out.stdout, "hello\n");
+}
+
+#[tokio::test]
+async fn pipe_printf_to_head() {
+    let out = run("printf 'line1\nline2\n' | head -n 1").await;
+    assert_eq!(out.stdout, "line1\n");
+}
+
 // ── Builder API ─────────────────────────────────────────────────────
 
 #[tokio::test]
