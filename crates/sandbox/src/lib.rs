@@ -101,6 +101,16 @@ impl Shell {
     pub fn register_builtin(&mut self, builtin: impl builtins::Builtin + 'static) {
         self.interpreter.builtins.register(builtin);
     }
+
+    /// Capture a snapshot of this shell's state.
+    pub fn snapshot(&self) -> snapshot::ShellSnapshot {
+        snapshot::ShellSnapshot::capture(self)
+    }
+
+    /// Create a new shell from a snapshot.
+    pub fn from_snapshot(snap: &snapshot::ShellSnapshot) -> Shell {
+        snap.restore()
+    }
 }
 
 pub struct ShellBuilder {

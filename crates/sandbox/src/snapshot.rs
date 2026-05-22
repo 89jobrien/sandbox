@@ -13,13 +13,32 @@ pub struct ShellSnapshot {
     pub vars: HashMap<String, String>,
     pub cwd: String,
     pub functions: HashMap<String, Command>,
-    pub files: Vec<(String, Vec<u8>)>,
+    pub files: Vec<FileEntry>,
+}
+
+/// A single file or directory entry in a snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEntry {
+    pub path: String,
+    pub content: Vec<u8>,
+    pub is_dir: bool,
 }
 
 impl ShellSnapshot {
     /// Capture the current state of a shell into a snapshot.
     pub fn capture(shell: &Shell) -> Self {
-        let files = shell.fs().walk_files();
+        let files = shell
+            .fs()
+            .walk_all()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(path, content, is_dir)| FileEntry {
+                path,
+                content,
+                is_dir,
+            })
+            .collect();
+
         Self {
             env: shell.env().clone(),
             vars: shell.vars().clone(),
@@ -29,19 +48,28 @@ impl ShellSnapshot {
         }
     }
 
-    /// Restore a shell from a snapshot.
-    pub fn restore(self) -> Shell {
+    /// Restore a shell from this snapshot.
+    pub fn restore(&self) -> Shell {
         let fs = SandboxFs::new();
         let caps = crate::capabilities::CapabilitySet::default_set();
-        for (path, contents) in &self.files {
-            let _ = fs.write_file(path, contents, &caps);
+
+        // Create directories first, then files
+        for entry in &self.files {
+            if entry.is_dir {
+                let _ = fs.mkdir(&entry.path, &caps);
+            }
+        }
+        for entry in &self.files {
+            if !entry.is_dir {
+                let _ = fs.write_file(&entry.path, &entry.content, &caps);
+            }
         }
 
         Shell::builder()
-            .envs(self.env)
-            .cwd(self.cwd)
+            .envs(self.env.clone())
+            .cwd(&self.cwd)
             .fs(fs)
-            .build_with_state(self.vars, self.functions)
+            .build_with_state(self.vars.clone(), self.functions.clone())
     }
 
     /// Serialize to JSON.

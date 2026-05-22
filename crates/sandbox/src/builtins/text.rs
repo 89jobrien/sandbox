@@ -131,10 +131,10 @@ impl Builtin for Basename {
         // Strip suffix if provided
         if args.len() > 1 {
             let suffix = &args[1];
-            if let Some(stripped) = name.strip_suffix(suffix.as_str()) {
-                if !stripped.is_empty() {
-                    name = stripped.to_string();
-                }
+            if let Some(stripped) = name.strip_suffix(suffix.as_str())
+                && !stripped.is_empty()
+            {
+                name = stripped.to_string();
             }
         }
 
