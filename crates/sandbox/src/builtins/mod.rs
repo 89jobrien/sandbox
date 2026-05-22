@@ -114,6 +114,14 @@ impl BuiltinRegistry {
         reg.register(file::Cp);
         reg.register(file::Mv);
         reg.register(file::Touch);
+        reg.register(file::Wc);
+        reg.register(file::Basename);
+        reg.register(file::Dirname);
+        reg.register(file::Sort);
+        reg.register(file::Uniq);
+        reg.register(file::Tee);
+        reg.register(file::Find);
+        reg.register(file::GrepBuiltin);
         // Flow
         reg.register(flow::True_);
         reg.register(flow::False_);
