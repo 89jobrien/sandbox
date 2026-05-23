@@ -1,0 +1,41 @@
+project: sandbox
+updated: "20260523::142718"
+
+items:
+  - id: h1
+    title: Commit session work — tracing, subshell isolation, rustqual refactor
+    priority: P0
+    status: open
+    description: >
+      All changes from this session are unstaged. Includes: execution tracing
+      (TraceEvent wired into Shell API), subshell isolation (save/restore pattern),
+      and rustqual refactor chain t1-t9 (73.4% → 89.8% quality score, 30 findings,
+      191 tests pass, zero clippy warnings). Baseline saved to
+      crates/sandbox/.rustqual-baseline.json.
+    files:
+      - crates/sandbox/src/interpreter/mod.rs
+      - crates/sandbox/src/lib.rs
+      - crates/sandbox/src/trace.rs
+      - crates/sandbox/src/snapshot.rs
+      - crates/sandbox/src/capabilities.rs
+      - crates/sandbox/src/parser/lexer.rs
+      - crates/sandbox/src/parser/mod.rs
+      - crates/sandbox/src/builtins/text.rs
+      - crates/sandbox/src/builtins/nav.rs
+      - crates/sandbox/src/builtins/core.rs
+      - crates/sandbox/src/builtins/file.rs
+      - crates/sandbox/src/fs.rs
+      - crates/sandbox/tests/integration.rs
+      - rustqual.toml
+      - crates/sandbox/.rustqual-baseline.json
+      - docs/plans/2026-05-22-execution-tracing.md
+      - docs/plans/2026-05-22-subshell-isolation.md
+
+log:
+  - date: "20260523::142718"
+    session: 1
+    summary: >
+      Implemented execution tracing (TraceEvent), subshell isolation (save/restore),
+      and completed rustqual refactor chain t1-t9 raising quality from 73.4% to 89.8%.
+      191 tests pass, zero clippy warnings. Work unstaged pending commit.
+    commits: []
