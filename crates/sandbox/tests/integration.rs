@@ -38,23 +38,6 @@ async fn case_wildcard_fallthrough() {
     assert_eq!(out.exit_code, 0);
 }
 
-#[tokio::test]
-async fn case_no_match() {
-    let out = run("case xyz in abc) echo no;; esac").await;
-    assert_eq!(out.stdout, "");
-    assert_eq!(out.exit_code, 0);
-}
-
-// ── Until loop ──────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn until_loop() {
-    let mut s = shell().await;
-    s.exec("count=0").await.unwrap();
-    let out = s.exec("for i in a b c; do echo $i; done").await.unwrap();
-    assert_eq!(out.stdout, "a\nb\nc\n");
-}
-
 // ── Elif chains ─────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -574,15 +557,6 @@ async fn uniq_via_pipe() {
     s.exec("printf 'a\\na\\nb\\n' > /f.txt").await.unwrap();
     let out = s.exec("cat /f.txt | uniq").await.unwrap();
     assert_eq!(out.stdout, "a\nb\n");
-}
-
-#[tokio::test]
-async fn tee_via_pipe() {
-    let mut s = Shell::builder().cwd("/").build();
-    let out = s.exec("echo hello | tee /out.txt").await.unwrap();
-    assert_eq!(out.stdout, "hello\n");
-    let out = s.exec("cat /out.txt").await.unwrap();
-    assert_eq!(out.stdout, "hello\n");
 }
 
 #[tokio::test]

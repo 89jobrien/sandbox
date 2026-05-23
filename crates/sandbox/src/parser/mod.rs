@@ -1,10 +1,14 @@
 pub mod ast;
 pub mod lexer;
 
-use ast::*;
+use ast::{Assignment, CaseArm, Command, RedirectKind, Redirection, SimpleCommand, Word, WordPart};
 use lexer::{QuotedSegment, Token};
 
 use crate::error::{ShellError, ShellResult};
+
+/// Default fuel/depth for nested Parser::parse calls (command substitutions).
+const NESTED_PARSE_FUEL: usize = 10_000;
+const NESTED_PARSE_DEPTH: usize = 50;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -244,7 +248,7 @@ impl Parser {
                             QuotedSegment::Variable(v) => WordPart::Variable(v),
                             QuotedSegment::CommandSub(c) => {
                                 // Parse the command substitution body
-                                match Parser::parse(&c, 10_000, 50) {
+                                match Parser::parse(&c, NESTED_PARSE_FUEL, NESTED_PARSE_DEPTH) {
                                     Ok(cmd) => WordPart::CommandSub(Box::new(cmd)),
                                     Err(_) => WordPart::Literal(format!("$({c})")),
                                 }
@@ -261,7 +265,7 @@ impl Parser {
                         if matches!(self.peek(), Token::RParen) {
                             self.advance();
                         }
-                        match Parser::parse(&cmd_str, 10_000, 50) {
+                        match Parser::parse(&cmd_str, NESTED_PARSE_FUEL, NESTED_PARSE_DEPTH) {
                             Ok(cmd) => words.push(Word::CommandSub(Box::new(cmd))),
                             Err(_) => words.push(Word::Literal(format!("$({cmd_str})"))),
                         }
@@ -270,82 +274,20 @@ impl Parser {
                 Token::Backtick(cmd_str) => {
                     let cmd_str = cmd_str.clone();
                     self.advance();
-                    match Parser::parse(&cmd_str, 10_000, 50) {
+                    match Parser::parse(&cmd_str, NESTED_PARSE_FUEL, NESTED_PARSE_DEPTH) {
                         Ok(cmd) => words.push(Word::CommandSub(Box::new(cmd))),
                         Err(_) => words.push(Word::Literal(cmd_str)),
                     }
                 }
-                Token::RedirectOut => {
-                    self.advance();
-                    let target = self.parse_word()?;
-                    redirections.push(Redirection {
-                        fd: Some(1),
-                        kind: RedirectKind::Output,
-                        target,
-                    });
-                }
-                Token::RedirectAppend => {
-                    self.advance();
-                    let target = self.parse_word()?;
-                    redirections.push(Redirection {
-                        fd: Some(1),
-                        kind: RedirectKind::Append,
-                        target,
-                    });
-                }
-                Token::RedirectIn => {
-                    self.advance();
-                    let target = self.parse_word()?;
-                    redirections.push(Redirection {
-                        fd: Some(0),
-                        kind: RedirectKind::Input,
-                        target,
-                    });
-                }
-                Token::RedirectErr => {
-                    self.advance();
-                    let target = self.parse_word()?;
-                    redirections.push(Redirection {
-                        fd: Some(2),
-                        kind: RedirectKind::ErrOutput,
-                        target,
-                    });
-                }
-                Token::RedirectErrAppend => {
-                    self.advance();
-                    let target = self.parse_word()?;
-                    redirections.push(Redirection {
-                        fd: Some(2),
-                        kind: RedirectKind::ErrAppend,
-                        target,
-                    });
-                }
-                Token::RedirectBoth => {
-                    self.advance();
-                    let target = self.parse_word()?;
-                    redirections.push(Redirection {
-                        fd: None,
-                        kind: RedirectKind::Both,
-                        target,
-                    });
-                }
-                Token::HereDoc(body) => {
-                    let body = body.clone();
-                    self.advance();
-                    redirections.push(Redirection {
-                        fd: Some(0),
-                        kind: RedirectKind::HereDoc,
-                        target: Word::Literal(body),
-                    });
-                }
-                Token::HereString(s) => {
-                    let s = s.clone();
-                    self.advance();
-                    redirections.push(Redirection {
-                        fd: Some(0),
-                        kind: RedirectKind::HereString,
-                        target: Word::Literal(s),
-                    });
+                Token::RedirectOut
+                | Token::RedirectAppend
+                | Token::RedirectIn
+                | Token::RedirectErr
+                | Token::RedirectErrAppend
+                | Token::RedirectBoth
+                | Token::HereDoc(_)
+                | Token::HereString(_) => {
+                    redirections.push(self.parse_redirection()?);
                 }
                 Token::Assign(name, value) => {
                     let name = name.clone();
@@ -375,6 +317,76 @@ impl Parser {
         }))
     }
 
+    fn parse_redirection(&mut self) -> ShellResult<Redirection> {
+        match self.peek().clone() {
+            Token::RedirectOut => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(1),
+                    kind: RedirectKind::Output,
+                    target: self.parse_word()?,
+                })
+            }
+            Token::RedirectAppend => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(1),
+                    kind: RedirectKind::Append,
+                    target: self.parse_word()?,
+                })
+            }
+            Token::RedirectIn => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(0),
+                    kind: RedirectKind::Input,
+                    target: self.parse_word()?,
+                })
+            }
+            Token::RedirectErr => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(2),
+                    kind: RedirectKind::ErrOutput,
+                    target: self.parse_word()?,
+                })
+            }
+            Token::RedirectErrAppend => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(2),
+                    kind: RedirectKind::ErrAppend,
+                    target: self.parse_word()?,
+                })
+            }
+            Token::RedirectBoth => {
+                self.advance();
+                Ok(Redirection {
+                    fd: None,
+                    kind: RedirectKind::Both,
+                    target: self.parse_word()?,
+                })
+            }
+            Token::HereDoc(body) => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(0),
+                    kind: RedirectKind::HereDoc,
+                    target: Word::Literal(body),
+                })
+            }
+            Token::HereString(s) => {
+                self.advance();
+                Ok(Redirection {
+                    fd: Some(0),
+                    kind: RedirectKind::HereString,
+                    target: Word::Literal(s),
+                })
+            }
+            _ => Err(ShellError::ParseError("expected redirection".into())),
+        }
+    }
+
     fn parse_word(&mut self) -> ShellResult<Word> {
         match self.peek() {
             Token::Word(w) => {
@@ -395,10 +407,12 @@ impl Parser {
                     .map(|s| match s {
                         QuotedSegment::Literal(l) => WordPart::Literal(l),
                         QuotedSegment::Variable(v) => WordPart::Variable(v),
-                        QuotedSegment::CommandSub(c) => match Parser::parse(&c, 10_000, 50) {
-                            Ok(cmd) => WordPart::CommandSub(Box::new(cmd)),
-                            Err(_) => WordPart::Literal(format!("$({c})")),
-                        },
+                        QuotedSegment::CommandSub(c) => {
+                            match Parser::parse(&c, NESTED_PARSE_FUEL, NESTED_PARSE_DEPTH) {
+                                Ok(cmd) => WordPart::CommandSub(Box::new(cmd)),
+                                Err(_) => WordPart::Literal(format!("$({c})")),
+                            }
+                        }
                     })
                     .collect();
                 Ok(Word::DoubleQuoted(parts))
@@ -499,23 +513,15 @@ impl Parser {
     }
 
     fn parse_while(&mut self) -> ShellResult<Command> {
-        self.eat(&Token::While)?;
-        self.skip_newlines();
-        let condition = self.parse_list()?;
-        self.skip_newlines();
-        self.eat(&Token::Do)?;
-        self.skip_newlines();
-        let body = self.parse_list()?;
-        self.skip_newlines();
-        self.eat(&Token::Done)?;
-        Ok(Command::While {
-            condition: Box::new(condition),
-            body: Box::new(body),
-        })
+        self.parse_loop(Token::While, true)
     }
 
     fn parse_until(&mut self) -> ShellResult<Command> {
-        self.eat(&Token::Until)?;
+        self.parse_loop(Token::Until, false)
+    }
+
+    fn parse_loop(&mut self, keyword: Token, is_while: bool) -> ShellResult<Command> {
+        self.eat(&keyword)?;
         self.skip_newlines();
         let condition = self.parse_list()?;
         self.skip_newlines();
@@ -524,10 +530,13 @@ impl Parser {
         let body = self.parse_list()?;
         self.skip_newlines();
         self.eat(&Token::Done)?;
-        Ok(Command::Until {
-            condition: Box::new(condition),
-            body: Box::new(body),
-        })
+        let condition = Box::new(condition);
+        let body = Box::new(body);
+        if is_while {
+            Ok(Command::While { condition, body })
+        } else {
+            Ok(Command::Until { condition, body })
+        }
     }
 
     fn parse_case(&mut self) -> ShellResult<Command> {

@@ -59,15 +59,6 @@ pub enum Word {
     Compound(Vec<Word>),
 }
 
-impl Word {
-    pub fn as_literal(&self) -> Option<&str> {
-        match self {
-            Word::Literal(s) | Word::SingleQuoted(s) => Some(s),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum WordPart {
     Literal(String),

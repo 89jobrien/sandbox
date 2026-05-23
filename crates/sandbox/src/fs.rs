@@ -15,10 +15,6 @@ impl SandboxFs {
         Self { root }
     }
 
-    pub fn from_vfs(root: VfsPath) -> Self {
-        Self { root }
-    }
-
     fn resolve(&self, path: &str) -> ShellResult<VfsPath> {
         let normalized = normalize_path(path);
         self.root
@@ -125,6 +121,7 @@ impl SandboxFs {
         Ok(())
     }
 
+    // qual:allow(iosp) — I/O boundary: recursive VFS removal
     #[allow(clippy::only_used_in_recursion)]
     fn remove_recursive(&self, path: &VfsPath, caps: &CapabilitySet) -> ShellResult<()> {
         let meta = path.metadata().map_err(|e| ShellError::Io(e.to_string()))?;
@@ -175,14 +172,6 @@ impl SandboxFs {
         self.remove_file(src, caps)?;
         Ok(())
     }
-
-    pub fn file_size(&self, path: &str) -> ShellResult<u64> {
-        let vpath = self.resolve(path)?;
-        let meta = vpath
-            .metadata()
-            .map_err(|e| ShellError::Io(format!("{path}: {e}")))?;
-        Ok(meta.len)
-    }
 }
 
 impl SandboxFs {
@@ -193,6 +182,7 @@ impl SandboxFs {
         Ok(result)
     }
 
+    // qual:allow(iosp) — I/O boundary: recursive VFS walk
     fn walk_all_recursive(path: &VfsPath, result: &mut Vec<(String, Vec<u8>, bool)>) {
         let Ok(meta) = path.metadata() else { return };
         let vfs_path = path.as_str().to_string();
@@ -220,39 +210,6 @@ impl SandboxFs {
                 let _ = f.read_to_end(&mut content);
             }
             result.push((file_path, content, false));
-        }
-    }
-
-    /// Recursively walk the VFS and return all file paths with their contents.
-    pub fn walk_files(&self) -> Vec<(String, Vec<u8>)> {
-        let mut result = Vec::new();
-        Self::walk_recursive(&self.root, &mut result);
-        result
-    }
-
-    fn walk_recursive(path: &VfsPath, result: &mut Vec<(String, Vec<u8>)>) {
-        let Ok(meta) = path.metadata() else { return };
-        if meta.file_type == vfs::VfsFileType::Directory {
-            let Ok(children) = path.read_dir() else {
-                return;
-            };
-            for child in children {
-                Self::walk_recursive(&child, result);
-            }
-        } else {
-            let vfs_path = path.as_str().to_string();
-            let file_path = if vfs_path.is_empty() {
-                "/".to_string()
-            } else {
-                format!("/{vfs_path}")
-            };
-            if let Ok(mut f) = path.open_file() {
-                let mut buf = Vec::new();
-                use std::io::Read;
-                if f.read_to_end(&mut buf).is_ok() {
-                    result.push((file_path, buf));
-                }
-            }
         }
     }
 }

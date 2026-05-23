@@ -90,10 +90,6 @@ impl BuiltinRegistry {
         self.builtins.get(name).map(|b| b.as_ref())
     }
 
-    pub fn names(&self) -> Vec<&str> {
-        self.builtins.keys().map(|s| s.as_str()).collect()
-    }
-
     pub fn with_core_builtins() -> Self {
         let mut reg = Self::new();
         // Core

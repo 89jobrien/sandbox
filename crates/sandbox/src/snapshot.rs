@@ -72,22 +72,22 @@ impl ShellSnapshot {
             .build_with_state(self.vars.clone(), self.functions.clone())
     }
 
-    /// Serialize to JSON.
+    // qual:api
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 
-    /// Deserialize from JSON.
+    // qual:api
     pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json)
     }
 
-    /// Serialize to bincode bytes.
+    // qual:api
     pub fn to_bincode(&self) -> Result<Vec<u8>, bincode::error::EncodeError> {
         bincode::serde::encode_to_vec(self, bincode::config::standard())
     }
 
-    /// Deserialize from bincode bytes.
+    // qual:api
     pub fn from_bincode(bytes: &[u8]) -> Result<Self, bincode::error::DecodeError> {
         bincode::serde::decode_from_slice(bytes, bincode::config::standard()).map(|(val, _)| val)
     }

@@ -35,6 +35,7 @@ impl Shell {
         ShellBuilder::default()
     }
 
+    // qual:api
     pub async fn exec(&mut self, input: &str) -> ShellResult<ShellOutput> {
         if input.len() > self.interpreter.limits.max_input_bytes {
             return Err(ShellError::LimitExceeded(format!(
@@ -94,20 +95,32 @@ impl Shell {
         &self.interpreter.functions
     }
 
+    // qual:api
     pub fn last_exit_code(&self) -> i32 {
         self.interpreter.last_exit_code
     }
 
+    // qual:api
+    pub fn trace_events(&self) -> &[trace::TraceEvent] {
+        &self.interpreter.trace_events
+    }
+
+    // qual:api
+    pub fn take_trace_events(&mut self) -> Vec<trace::TraceEvent> {
+        std::mem::take(&mut self.interpreter.trace_events)
+    }
+
+    // qual:api
     pub fn register_builtin(&mut self, builtin: impl builtins::Builtin + 'static) {
         self.interpreter.builtins.register(builtin);
     }
 
-    /// Capture a snapshot of this shell's state.
+    // qual:api
     pub fn snapshot(&self) -> snapshot::ShellSnapshot {
         snapshot::ShellSnapshot::capture(self)
     }
 
-    /// Create a new shell from a snapshot.
+    // qual:api
     pub fn from_snapshot(snap: &snapshot::ShellSnapshot) -> Shell {
         snap.restore()
     }
@@ -121,6 +134,7 @@ pub struct ShellBuilder {
     fs: Option<SandboxFs>,
     exec_handler: Option<Box<dyn ExecHandler>>,
     builtins: Option<BuiltinRegistry>,
+    tracing: bool,
 }
 
 impl Default for ShellBuilder {
@@ -133,6 +147,7 @@ impl Default for ShellBuilder {
             fs: None,
             exec_handler: None,
             builtins: None,
+            tracing: false,
         }
     }
 }
@@ -153,6 +168,7 @@ impl ShellBuilder {
         self
     }
 
+    // qual:api
     pub fn limits(mut self, limits: ExecutionLimits) -> Self {
         self.limits = limits;
         self
@@ -163,6 +179,7 @@ impl ShellBuilder {
         self
     }
 
+    // qual:api
     pub fn capability(mut self, cap: Cap) -> Self {
         self.capabilities
             .get_or_insert_with(CapabilitySet::default_set)
@@ -175,6 +192,7 @@ impl ShellBuilder {
         self
     }
 
+    // qual:api
     pub fn exec_handler(mut self, handler: impl ExecHandler + 'static) -> Self {
         self.exec_handler = Some(Box::new(handler));
         self
@@ -182,6 +200,12 @@ impl ShellBuilder {
 
     pub fn builtins(mut self, registry: BuiltinRegistry) -> Self {
         self.builtins = Some(registry);
+        self
+    }
+
+    // qual:api
+    pub fn tracing(mut self, enabled: bool) -> Self {
+        self.tracing = enabled;
         self
     }
 
@@ -216,10 +240,13 @@ impl ShellBuilder {
                 stderr_buf: String::new(),
                 pipeline_stdin: None,
                 shell_opts: ShellOpts::default(),
+                tracing_enabled: self.tracing,
+                trace_events: Vec::new(),
             },
         }
     }
 
+    // qual:api
     pub fn build(self) -> Shell {
         let fs = self.fs.unwrap_or_default();
         let capabilities = self.capabilities.unwrap_or_else(CapabilitySet::default_set);
@@ -248,6 +275,8 @@ impl ShellBuilder {
                 stderr_buf: String::new(),
                 pipeline_stdin: None,
                 shell_opts: ShellOpts::default(),
+                tracing_enabled: self.tracing,
+                trace_events: Vec::new(),
             },
         }
     }
@@ -444,6 +473,92 @@ mod tests {
         let output = shell.exec("echo $FOO").await.unwrap();
         assert_eq!(output.stdout, "bar\n");
         assert_eq!(shell.env().get("FOO").unwrap(), "bar");
+    }
+
+    #[tokio::test]
+    async fn trace_events_emitted() {
+        let mut shell = Shell::builder().cwd("/").tracing(true).build();
+        shell.exec("echo hello").await.unwrap();
+        let events = shell.trace_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].command, "echo");
+        assert_eq!(events[0].args, vec!["hello"]);
+        assert_eq!(events[0].exit_code, 0);
+    }
+
+    #[tokio::test]
+    async fn trace_not_emitted_when_disabled() {
+        let mut shell = Shell::builder().cwd("/").build();
+        shell.exec("echo hello").await.unwrap();
+        assert!(shell.trace_events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn take_trace_events_clears() {
+        let mut shell = Shell::builder().cwd("/").tracing(true).build();
+        shell.exec("echo a").await.unwrap();
+        let events = shell.take_trace_events();
+        assert_eq!(events.len(), 1);
+        assert!(shell.trace_events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn trace_pipeline_stages() {
+        let mut shell = Shell::builder().cwd("/").tracing(true).build();
+        shell.exec("echo hello | cat").await.unwrap();
+        let events = shell.trace_events();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].command, "echo");
+        assert_eq!(events[1].command, "cat");
+    }
+
+    #[tokio::test]
+    async fn subshell_isolates_vars() {
+        let mut shell = Shell::builder().cwd("/").build();
+        shell.exec("X=outer").await.unwrap();
+        shell.exec("(X=inner)").await.unwrap();
+        let output = shell.exec("echo $X").await.unwrap();
+        assert_eq!(output.stdout, "outer\n");
+    }
+
+    #[tokio::test]
+    async fn subshell_isolates_cwd() {
+        let mut shell = Shell::builder().cwd("/").build();
+        shell.exec("mkdir -p /tmp/sub").await.unwrap();
+        shell.exec("(cd /tmp/sub)").await.unwrap();
+        assert_eq!(shell.cwd(), "/");
+    }
+
+    #[tokio::test]
+    async fn subshell_isolates_functions() {
+        let mut shell = Shell::builder().cwd("/").build();
+        shell.exec("(function foo { echo bar; })").await.unwrap();
+        let output = shell.exec("foo").await.unwrap();
+        assert_eq!(output.exit_code, 127);
+    }
+
+    #[tokio::test]
+    async fn subshell_isolates_env() {
+        let mut shell = Shell::builder().cwd("/").build();
+        shell.exec("export A=1").await.unwrap();
+        shell.exec("(export A=2)").await.unwrap();
+        let output = shell.exec("echo $A").await.unwrap();
+        assert_eq!(output.stdout, "1\n");
+    }
+
+    #[tokio::test]
+    async fn subshell_shares_fs() {
+        let mut shell = Shell::builder().cwd("/").build();
+        shell.exec("(echo hello > /sub.txt)").await.unwrap();
+        let output = shell.exec("cat /sub.txt").await.unwrap();
+        assert_eq!(output.stdout, "hello\n");
+    }
+
+    #[tokio::test]
+    async fn subshell_exit_code_propagates() {
+        let mut shell = Shell::builder().cwd("/").build();
+        let output = shell.exec("(false)").await.unwrap();
+        assert_eq!(output.exit_code, 1);
     }
 
     #[tokio::test]

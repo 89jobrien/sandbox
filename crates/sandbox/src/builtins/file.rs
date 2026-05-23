@@ -220,6 +220,7 @@ impl Builtin for Find {
         &[Cap::ReadFs]
     }
 
+    // qual:allow(iosp) — I/O boundary: walks filesystem
     async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
         let args = ctx.args_from(1);
         let mut search_dir = ".";
@@ -256,6 +257,7 @@ impl Builtin for Find {
     }
 }
 
+// qual:allow(iosp) — I/O boundary: recursive filesystem walk
 fn find_walk(
     fs: &crate::fs::SandboxFs,
     caps: &crate::capabilities::CapabilitySet,

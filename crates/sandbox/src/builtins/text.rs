@@ -359,18 +359,16 @@ impl Builtin for Tee {
 
 pub struct GrepBuiltin;
 
-#[async_trait]
-impl Builtin for GrepBuiltin {
-    fn name(&self) -> &str {
-        "grep"
-    }
+struct GrepOpts<'a> {
+    case_insensitive: bool,
+    invert: bool,
+    count_only: bool,
+    pattern: &'a str,
+    files: Vec<&'a str>,
+}
 
-    fn required_capabilities(&self) -> &[Cap] {
-        &[Cap::ReadFs]
-    }
-
-    async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
-        let args = ctx.args_from(1);
+impl GrepBuiltin {
+    fn parse_opts<'a>(args: &'a [String]) -> Result<GrepOpts<'a>, ExecResult> {
         let mut case_insensitive = false;
         let mut invert = false;
         let mut count_only = false;
@@ -402,14 +400,49 @@ impl Builtin for GrepBuiltin {
             }
         }
 
-        let Some(pat) = pattern_str else {
-            return Ok(ExecResult::failure(2, "grep: missing pattern"));
+        let Some(pattern) = pattern_str else {
+            return Err(ExecResult::failure(2, "grep: missing pattern"));
         };
 
-        let regex_pat = if case_insensitive {
-            format!("(?i){pat}")
+        Ok(GrepOpts {
+            case_insensitive,
+            invert,
+            count_only,
+            pattern,
+            files,
+        })
+    }
+
+    fn grep_lines<'a>(re: &Regex, content: &'a str, invert: bool) -> Vec<&'a str> {
+        content
+            .lines()
+            .filter(|line| re.is_match(line) != invert)
+            .collect()
+    }
+}
+
+#[async_trait]
+impl Builtin for GrepBuiltin {
+    fn name(&self) -> &str {
+        "grep"
+    }
+
+    fn required_capabilities(&self) -> &[Cap] {
+        &[Cap::ReadFs]
+    }
+
+    // qual:allow(iosp) — I/O boundary: reads files and filters
+    async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
+        let args = ctx.args_from(1);
+        let opts = match Self::parse_opts(args) {
+            Ok(o) => o,
+            Err(e) => return Ok(e),
+        };
+
+        let regex_pat = if opts.case_insensitive {
+            format!("(?i){}", opts.pattern)
         } else {
-            pat.to_string()
+            opts.pattern.to_string()
         };
 
         let re = match Regex::new(&regex_pat) {
@@ -422,20 +455,14 @@ impl Builtin for GrepBuiltin {
             }
         };
 
-        let content = match read_input(&ctx, &files) {
+        let content = match read_input(&ctx, &opts.files) {
             Ok(c) => c,
             Err(e) => return Ok(e),
         };
 
-        let mut matched = Vec::new();
-        for line in content.lines() {
-            let is_match = re.is_match(line);
-            if is_match != invert {
-                matched.push(line);
-            }
-        }
+        let matched = Self::grep_lines(&re, &content, opts.invert);
 
-        if count_only {
+        if opts.count_only {
             return Ok(ExecResult {
                 exit_code: if matched.is_empty() { 1 } else { 0 },
                 stdout: format!("{}\n", matched.len()),

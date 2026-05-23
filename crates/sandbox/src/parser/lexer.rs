@@ -127,76 +127,11 @@ impl Lexer {
                     self.advance();
                     tokens.push(Token::Newline);
                 }
-                Some('|') => {
-                    self.advance();
-                    if self.peek() == Some('|') {
-                        self.advance();
-                        tokens.push(Token::Or);
-                    } else {
-                        tokens.push(Token::Pipe);
-                    }
+                Some('|' | '&' | ';' | '(' | ')' | '{' | '}' | '!') => {
+                    tokens.push(self.lex_operator());
                 }
-                Some('&') => {
-                    self.advance();
-                    if self.peek() == Some('&') {
-                        self.advance();
-                        tokens.push(Token::And);
-                    } else if self.peek() == Some('>') {
-                        self.advance();
-                        tokens.push(Token::RedirectBoth);
-                    } else {
-                        tokens.push(Token::Ampersand);
-                    }
-                }
-                Some(';') => {
-                    self.advance();
-                    tokens.push(Token::Semi);
-                }
-                Some('(') => {
-                    self.advance();
-                    tokens.push(Token::LParen);
-                }
-                Some(')') => {
-                    self.advance();
-                    tokens.push(Token::RParen);
-                }
-                Some('{') => {
-                    self.advance();
-                    tokens.push(Token::LBrace);
-                }
-                Some('}') => {
-                    self.advance();
-                    tokens.push(Token::RBrace);
-                }
-                Some('!') => {
-                    self.advance();
-                    tokens.push(Token::Bang);
-                }
-                Some('>') => {
-                    self.advance();
-                    if self.peek() == Some('>') {
-                        self.advance();
-                        tokens.push(Token::RedirectAppend);
-                    } else {
-                        tokens.push(Token::RedirectOut);
-                    }
-                }
-                Some('<') => {
-                    self.advance();
-                    if self.peek() == Some('<') {
-                        self.advance();
-                        if self.peek() == Some('<') {
-                            self.advance();
-                            let s = self.read_here_string()?;
-                            tokens.push(Token::HereString(s));
-                        } else {
-                            let delim = self.read_here_doc_delim()?;
-                            let body = self.read_here_doc_body(&delim)?;
-                            tokens.push(Token::HereDoc(body));
-                        }
-                    } else {
-                        tokens.push(Token::RedirectIn);
-                    }
+                Some('>' | '<') => {
+                    tokens.extend(self.lex_redirect()?);
                 }
                 Some('\'') => {
                     let s = self.read_single_quoted()?;
@@ -220,34 +155,10 @@ impl Lexer {
                     }
                 }
                 Some('`') => {
-                    self.advance();
-                    let mut s = String::new();
-                    while let Some(c) = self.peek() {
-                        if c == '`' {
-                            self.advance();
-                            break;
-                        }
-                        if c == '\\' {
-                            self.advance();
-                            if let Some(c2) = self.advance() {
-                                s.push(c2);
-                            }
-                        } else {
-                            s.push(c);
-                            self.advance();
-                        }
-                    }
-                    tokens.push(Token::Backtick(s));
+                    tokens.push(self.lex_backtick()?);
                 }
-                Some(c) if c == '2' && self.peek_at(1) == Some('>') => {
-                    self.advance(); // 2
-                    self.advance(); // >
-                    if self.peek() == Some('>') {
-                        self.advance();
-                        tokens.push(Token::RedirectErrAppend);
-                    } else {
-                        tokens.push(Token::RedirectErr);
-                    }
+                Some('2') if self.peek_at(1) == Some('>') => {
+                    tokens.push(self.lex_stderr_redirect());
                 }
                 Some(_) => {
                     let w = self.read_word()?;
@@ -256,6 +167,88 @@ impl Lexer {
             }
         }
         Ok(tokens)
+    }
+
+    fn lex_operator(&mut self) -> Token {
+        match self.advance() {
+            Some('|') if self.peek() == Some('|') => {
+                self.advance();
+                Token::Or
+            }
+            Some('|') => Token::Pipe,
+            Some('&') if self.peek() == Some('&') => {
+                self.advance();
+                Token::And
+            }
+            Some('&') if self.peek() == Some('>') => {
+                self.advance();
+                Token::RedirectBoth
+            }
+            Some('&') => Token::Ampersand,
+            Some(';') => Token::Semi,
+            Some('(') => Token::LParen,
+            Some(')') => Token::RParen,
+            Some('{') => Token::LBrace,
+            Some('}') => Token::RBrace,
+            Some('!') => Token::Bang,
+            _ => unreachable!(),
+        }
+    }
+
+    fn lex_redirect(&mut self) -> ShellResult<Vec<Token>> {
+        match self.advance() {
+            Some('>') if self.peek() == Some('>') => {
+                self.advance();
+                Ok(vec![Token::RedirectAppend])
+            }
+            Some('>') => Ok(vec![Token::RedirectOut]),
+            Some('<') if self.peek() == Some('<') => {
+                self.advance();
+                if self.peek() == Some('<') {
+                    self.advance();
+                    let s = self.read_here_string()?;
+                    Ok(vec![Token::HereString(s)])
+                } else {
+                    let delim = self.read_here_doc_delim()?;
+                    let body = self.read_here_doc_body(&delim)?;
+                    Ok(vec![Token::HereDoc(body)])
+                }
+            }
+            Some('<') => Ok(vec![Token::RedirectIn]),
+            _ => unreachable!(),
+        }
+    }
+
+    fn lex_backtick(&mut self) -> ShellResult<Token> {
+        self.advance(); // opening `
+        let mut s = String::new();
+        while let Some(c) = self.peek() {
+            if c == '`' {
+                self.advance();
+                break;
+            }
+            if c == '\\' {
+                self.advance();
+                if let Some(c2) = self.advance() {
+                    s.push(c2);
+                }
+            } else {
+                s.push(c);
+                self.advance();
+            }
+        }
+        Ok(Token::Backtick(s))
+    }
+
+    fn lex_stderr_redirect(&mut self) -> Token {
+        self.advance(); // 2
+        self.advance(); // >
+        if self.peek() == Some('>') {
+            self.advance();
+            Token::RedirectErrAppend
+        } else {
+            Token::RedirectErr
+        }
     }
 
     fn classify_word(&self, w: String) -> Token {

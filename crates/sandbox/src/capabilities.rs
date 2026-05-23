@@ -31,6 +31,7 @@ impl CapabilitySet {
         Self::new([Cap::ReadFs, Cap::WriteFs, Cap::EnvRead, Cap::EnvWrite])
     }
 
+    // qual:api
     pub fn empty() -> Self {
         Self::new([])
     }
@@ -49,9 +50,5 @@ impl CapabilitySet {
 
     pub fn grant(&mut self, cap: Cap) {
         self.caps.insert(cap);
-    }
-
-    pub fn revoke(&mut self, cap: Cap) {
-        self.caps.remove(&cap);
     }
 }

@@ -5,6 +5,9 @@ use crate::capabilities::Cap;
 use crate::error::ShellResult;
 use crate::interpreter::hooks::ExecResult;
 
+/// Default number of lines for head/tail when -n is not specified.
+const DEFAULT_HEAD_TAIL_LINES: usize = 10;
+
 pub struct Echo;
 
 #[async_trait]
@@ -238,7 +241,7 @@ impl Builtin for Head {
     }
 
     async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
-        let mut n_lines: usize = 10;
+        let mut n_lines: usize = DEFAULT_HEAD_TAIL_LINES;
         let mut files = Vec::new();
         let args = ctx.args_from(1);
         let mut i = 0;
@@ -248,7 +251,7 @@ impl Builtin for Head {
                 "-n" => {
                     i += 1;
                     if i < args.len() {
-                        n_lines = args[i].parse().unwrap_or(10);
+                        n_lines = args[i].parse().unwrap_or(DEFAULT_HEAD_TAIL_LINES);
                     }
                 }
                 s if s.starts_with('-') && s[1..].parse::<usize>().is_ok() => {
@@ -287,7 +290,7 @@ impl Builtin for Tail {
     }
 
     async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
-        let mut n_lines: usize = 10;
+        let mut n_lines: usize = DEFAULT_HEAD_TAIL_LINES;
         let mut files = Vec::new();
         let args = ctx.args_from(1);
         let mut i = 0;
@@ -297,7 +300,7 @@ impl Builtin for Tail {
                 "-n" => {
                     i += 1;
                     if i < args.len() {
-                        n_lines = args[i].parse().unwrap_or(10);
+                        n_lines = args[i].parse().unwrap_or(DEFAULT_HEAD_TAIL_LINES);
                     }
                 }
                 s if s.starts_with('-') && s[1..].parse::<usize>().is_ok() => {
@@ -333,6 +336,7 @@ impl Builtin for Test_ {
         "test"
     }
 
+    // qual:allow(iosp) — I/O boundary: delegates to evaluate_test
     async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
         let args = ctx.args_from(1);
         let result = evaluate_test(args, ctx.fs, ctx.cwd);
@@ -348,6 +352,7 @@ impl Builtin for BracketTest {
         "["
     }
 
+    // qual:allow(iosp) — I/O boundary: delegates to evaluate_test
     async fn execute(&self, ctx: Context<'_>) -> ShellResult<ExecResult> {
         let args = ctx.args_from(1);
         // Strip trailing ]
@@ -361,6 +366,7 @@ impl Builtin for BracketTest {
     }
 }
 
+// qual:allow(iosp) — I/O boundary: tests filesystem state
 fn evaluate_test(args: &[String], fs: &crate::fs::SandboxFs, cwd: &str) -> bool {
     if args.is_empty() {
         return false;

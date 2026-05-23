@@ -95,16 +95,7 @@ impl Builtin for Ls {
                     }
 
                     for entry in &entries {
-                        if long_format {
-                            let kind = if entry.is_dir { "d" } else { "-" };
-                            output.push_str(&format!(
-                                "{}rwxr-xr-x  1 user  group  {:>8}  {}\n",
-                                kind, entry.size, entry.name
-                            ));
-                        } else {
-                            output.push_str(&entry.name);
-                            output.push('\n');
-                        }
+                        format_entry(&mut output, entry, long_format);
                     }
                 }
                 Err(e) => {
@@ -114,6 +105,19 @@ impl Builtin for Ls {
         }
 
         Ok(ExecResult::success(output))
+    }
+}
+
+fn format_entry(output: &mut String, entry: &crate::fs::DirEntry, long_format: bool) {
+    if long_format {
+        let kind = if entry.is_dir { "d" } else { "-" };
+        output.push_str(&format!(
+            "{}rwxr-xr-x  1 user  group  {:>8}  {}\n",
+            kind, entry.size, entry.name
+        ));
+    } else {
+        output.push_str(&entry.name);
+        output.push('\n');
     }
 }
 

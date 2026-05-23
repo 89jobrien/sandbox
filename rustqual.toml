@@ -1,0 +1,96 @@
+# rustqual.toml — sandbox project configuration
+# Generated from analysis of 27 file(s), 417 function(s).
+#
+# Thresholds are set to current maximums + 20% headroom.
+# Tighten over time as quality improves.
+
+# ── Function Classification ──────────────────────────────────────────────
+
+ignore_functions = ["main", "test_*"]
+exclude_files = ["tests/integration.rs"]
+strict_closures = false
+strict_iterator_chains = false
+allow_recursion = false
+strict_error_propagation = false
+
+# ── Suppression Health ───────────────────────────────────────────────────
+# Raise ratio to accommodate inline qual:allow for public API methods
+max_suppression_ratio = 0.15
+fail_on_warnings = false
+
+# ── Complexity Analysis ──────────────────────────────────────────────────
+
+[complexity]
+enabled = true
+max_cognitive = 56           # current max: 46
+max_cyclomatic = 41          # current max: 34
+max_nesting_depth = 8        # current max: 6
+max_function_lines = 215     # current max: 179
+include_nesting_penalty = true
+detect_magic_numbers = true
+detect_unsafe = true
+detect_error_handling = true
+allowed_magic_numbers = ["0", "1", "-1", "2", "3", "0.0"]
+
+# ── DRY / Duplicate Detection ───────────────────────────────────────────
+
+[duplicates]
+enabled = true
+similarity_threshold = 0.85
+min_tokens = 30
+min_lines = 5
+min_statements = 3
+ignore_tests = true
+ignore_trait_impls = true
+detect_dead_code = true
+detect_wildcard_imports = true
+detect_repeated_matches = true
+
+# ── Boilerplate Detection ───────────────────────────────────────────────
+
+[boilerplate]
+enabled = true
+suggest_crates = true
+
+# ── SRP (Single Responsibility) ─────────────────────────────────────────
+
+[srp]
+enabled = true
+smell_threshold = 0.6
+max_fields = 16              # Interpreter has 16 fields — by design
+max_methods = 20
+max_fan_out = 10
+lcom4_threshold = 4          # Raise: facade/param-object structs are cohesive
+weights = [0.4, 0.25, 0.15, 0.2]
+file_length_baseline = 400   # Shell files are naturally larger
+file_length_ceiling = 800
+max_independent_clusters = 4 # Facades have multiple clusters
+min_cluster_statements = 5
+max_parameters = 5
+
+# ── Coupling Analysis ───────────────────────────────────────────────────
+
+[coupling]
+enabled = true
+max_instability = 0.9        # Interpreter is core orchestrator (0.88)
+max_fan_in = 15
+max_fan_out = 12
+check_sdp = false            # builtins->interpreter cycle is architectural
+
+# ── Test Quality Analysis ────────────────────────────────────────────────
+
+[test_quality]
+enabled = true
+# coverage_file = "lcov.info"
+
+# ── Quality Score Weights ────────────────────────────────────────────────
+# Must sum to approximately 1.0.
+
+[weights]
+iosp         = 0.22
+complexity   = 0.18
+dry          = 0.13
+srp          = 0.18
+coupling     = 0.09
+test_quality = 0.10
+architecture = 0.10
